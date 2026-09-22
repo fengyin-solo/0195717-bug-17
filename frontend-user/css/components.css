@@ -863,6 +863,33 @@
     font-family: "Courier New", monospace;
 }
 
+.quiz-meta-stats {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    flex-wrap: wrap;
+}
+
+.quiz-meta-stats .meta-item strong {
+    font-family: "Courier New", monospace;
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+.quiz-meta-stats .meta-correct strong {
+    color: var(--color-success);
+}
+
+.quiz-meta-stats .meta-wrong strong {
+    color: var(--color-error);
+}
+
+.quiz-meta-stats .meta-skip strong {
+    color: var(--color-text-hint);
+}
+
 .quiz-panel-body {
     padding: var(--spacing-md);
     overflow-y: auto;
@@ -1052,6 +1079,15 @@
     color: var(--color-text-secondary);
 }
 
+/* 导出成绩按钮靠左，其余操作按钮靠右 */
+.quiz-result-modal .modal-footer #btn-quiz-export {
+    margin-right: auto;
+}
+
+.quiz-result-modal .modal-footer {
+    flex-wrap: wrap;
+}
+
 /* 测验模式激活时调整主内容区 */
 .app-container.quiz-mode .app-main {
     padding-top: 40vh;
@@ -1079,5 +1115,14 @@
     
     .quiz-panel-footer .btn {
         width: 100%;
+    }
+
+    .quiz-result-stats {
+        flex-wrap: wrap;
+        gap: var(--spacing-sm);
+    }
+
+    .quiz-result-stats .stat-item {
+        flex: 0 0 calc(33.333% - var(--spacing-sm));
     }
 }

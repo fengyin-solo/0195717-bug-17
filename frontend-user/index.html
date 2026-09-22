@@ -21,7 +21,14 @@
                     <span class="score-label">得分</span>
                     <span class="score-value" id="quiz-score-value">0</span>
                     <span class="score-separator">/</span>
-                    <span class="score-total" id="quiz-score-total">0</span>
+                    <span class="score-total" id="quiz-score-total">100</span>
+                </div>
+                <div class="quiz-meta-stats" id="quiz-meta-stats">
+                    <span class="meta-item">正确率 <strong id="quiz-meta-accuracy">0%</strong></span>
+                    <span class="meta-item meta-correct">对 <strong id="quiz-meta-correct">0</strong></span>
+                    <span class="meta-item meta-wrong">错 <strong id="quiz-meta-wrong">0</strong></span>
+                    <span class="meta-item meta-skip">跳过 <strong id="quiz-meta-skipped">0</strong></span>
+                    <span class="meta-item">进度 <strong id="quiz-meta-progress">0/10</strong></span>
                 </div>
             </div>
             <button class="btn btn-icon" id="btn-quiz-close" title="关闭测验">
@@ -76,19 +83,39 @@
                 <div class="quiz-result-stats">
                     <div class="stat-item">
                         <span class="stat-value" id="quiz-total-score">0</span>
-                        <span class="stat-label">总分</span>
+                        <span class="stat-label">得分（满分<span id="quiz-max-score">100</span>）</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-value" id="quiz-accuracy">0%</span>
                         <span class="stat-label">正确率</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-value" id="quiz-answered">0</span>
-                        <span class="stat-label">已答题</span>
+                        <span class="stat-value" id="quiz-answered-correct">0</span>
+                        <span class="stat-label">答对</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="quiz-answered-wrong">0</span>
+                        <span class="stat-label">答错</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="quiz-answered-skipped">0</span>
+                        <span class="stat-label">跳过</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="quiz-answered">0/10</span>
+                        <span class="stat-label">进度</span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-quiz-export">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>导出成绩</span>
+                </button>
                 <button class="btn btn-secondary" id="btn-quiz-exit">
                     <span>退出测验</span>
                 </button>
