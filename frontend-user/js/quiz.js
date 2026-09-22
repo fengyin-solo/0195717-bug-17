@@ -1,12 +1,18 @@
 /**
  * 光学测验管理器
- * 
+ *
  * 功能：
  * - 随机选择测验题目
  * - 验证用户答案（透镜类型、参数、光线模式等）
  * - 评分并给出详细解释
  * - 提供提示功能
- * - 记录答题历史
+ * - 记录答题历史（答对 / 答错 / 跳过 分开统计）
+ *
+ * 统计口径（面板与结果弹窗、导出成绩文件共用同一份数据）：
+ * - 跳过与答错分开计数；正确率 = 答对数 /（答对数 + 答错数），跳过不计入分母
+ * - 总分固定按整套题目满分 CONFIG.QUIZ_SCORING.MAX_SCORE 显示
+ * - 一轮覆盖整套题库（每题只出现一次），答题结果写入 questionHistory
+ * - 会话持久化到 localStorage：中途退出再进来时恢复进度，不重复累计
  */
 class QuizManager {
     constructor(canvasManager) {
@@ -14,57 +20,99 @@ class QuizManager {
         this.renderer = canvasManager.getRenderer();
         this.currentQuestion = null;
         this.questionHistory = [];
-        this.score = 0;
-        this.totalQuestions = 0;
         this.hintUsed = false;
         this.isQuizMode = false;
+        // 本轮已经处理过（答对/答错/跳过）的题目 ID，保证不重复出题、不重复计分
         this.answeredQuestions = new Set();
+        // 本轮是否已答完整套题目
+        this.roundCompleted = false;
     }
-    
+
     /**
      * 开启测验模式
+     * 若存在未结束的会话则恢复之前的进度，否则开始全新一轮
+     * 返回：'resumed' 恢复了进行中的会话 | 'completed' 恢复了已完成的轮次 | 'new' 新开始
      */
     startQuizMode() {
+        const restored = this.loadSession();
+        if (restored === 'resumed' || restored === 'completed') {
+            return restored;
+        }
+
+        this.resetSessionState();
         this.isQuizMode = true;
-        this.score = 0;
-        this.totalQuestions = 0;
-        this.answeredQuestions.clear();
-        this.nextQuestion();
+        this._selectNextQuestion();
+        this.persistSession();
+        return 'new';
     }
-    
+
+    /**
+     * 重置一轮测验的内存状态
+     */
+    resetSessionState() {
+        this.questionHistory = [];
+        this.answeredQuestions.clear();
+        this.currentQuestion = null;
+        this.hintUsed = false;
+        this.roundCompleted = false;
+    }
+
     /**
      * 关闭测验模式
+     * 本轮已完成时清除持久化会话（下一次进入重新开始）；
+     * 未完成时保留会话，以便中途退出再进来时恢复进度
      */
     stopQuizMode() {
+        if (this.roundCompleted) {
+            this.clearSavedSession();
+        }
         this.isQuizMode = false;
         this.currentQuestion = null;
         this.hintUsed = false;
         window.dispatchEvent(new CustomEvent('quizStopped'));
     }
-    
+
     /**
-     * 获取下一道随机题目
+     * 获取下一道随机题目（从本轮尚未处理的题目中抽取）
+     * 整套题目都已处理时结束本轮
      */
     nextQuestion() {
+        this._selectNextQuestion();
+        this.persistSession();
+        return this.currentQuestion;
+    }
+
+    /**
+     * 内部：从剩余题目中抽题，或在题目用尽时结束本轮
+     */
+    _selectNextQuestion() {
         const questions = CONFIG.QUIZ_QUESTIONS;
-        let availableQuestions = questions.filter(q => !this.answeredQuestions.has(q.id));
-        
+        const availableQuestions = questions.filter(q => !this.answeredQuestions.has(q.id));
+
         if (availableQuestions.length === 0) {
-            this.answeredQuestions.clear();
-            availableQuestions = questions;
+            this._completeRound();
+            return;
         }
-        
+
         const randomIndex = Math.floor(Math.random() * availableQuestions.length);
         this.currentQuestion = availableQuestions[randomIndex];
         this.hintUsed = false;
-        
-        this.answeredQuestions.add(this.currentQuestion.id);
-        
+
         window.dispatchEvent(new CustomEvent('questionChanged', {
             detail: this.currentQuestion
         }));
-        
-        return this.currentQuestion;
+    }
+
+    /**
+     * 结束本轮答题
+     */
+    _completeRound() {
+        this.currentQuestion = null;
+        this.hintUsed = false;
+        this.roundCompleted = true;
+        window.dispatchEvent(new CustomEvent('quizRoundCompleted', {
+            detail: this.getStats()
+        }));
     }
     
     /**
@@ -87,9 +135,12 @@ class QuizManager {
         if (!this.currentQuestion) {
             return {
                 isCorrect: false,
+                outcome: 'wrong',
                 score: 0,
                 explanation: '请先选择一道题目',
-                details: []
+                details: [],
+                stats: this.getStats(),
+                roundCompleted: this.roundCompleted
             };
         }
         
@@ -106,9 +157,12 @@ class QuizManager {
         if (lenses.length === 0) {
             return {
                 isCorrect: false,
+                outcome: 'wrong',
                 score: 0,
                 explanation: '请先在画布上添加一个透镜，然后再提交答案。',
-                details: []
+                details: [],
+                stats: this.getStats(),
+                roundCompleted: this.roundCompleted
             };
         }
         
@@ -304,31 +358,77 @@ class QuizManager {
         
         let earnedScore = 0;
         if (isCorrect) {
-            earnedScore = this.hintUsed ? 5 : 10;
-            this.score += earnedScore;
+            earnedScore = this.hintUsed
+                ? CONFIG.QUIZ_SCORING.SCORE_WITH_HINT
+                : CONFIG.QUIZ_SCORING.SCORE_PER_QUESTION;
         }
-        this.totalQuestions++;
-        
+
         const explanation = question.explanation[explanationKey] || question.explanation.correct;
-        
-        this.questionHistory.push({
+
+        this._record({
             questionId: question.id,
             title: question.title,
+            outcome: isCorrect ? 'correct' : 'wrong',
             isCorrect: isCorrect,
             score: earnedScore,
             hintUsed: this.hintUsed,
+            details: results,
+            explanation: explanation,
             timestamp: Date.now()
         });
-        
+
         return {
             isCorrect: isCorrect,
+            outcome: isCorrect ? 'correct' : 'wrong',
             score: earnedScore,
-            totalScore: this.score,
-            totalQuestions: this.totalQuestions,
+            totalScore: this.getStats().score,
+            stats: this.getStats(),
+            roundCompleted: this.roundCompleted,
             explanation: explanation,
             details: results,
             hintUsed: this.hintUsed
         };
+    }
+
+    /**
+     * 跳过当前题目（不计分、不算答错，单独计入跳过数）
+     * 返回是否已答完整套题目
+     */
+    skipQuestion() {
+        if (!this.currentQuestion) {
+            return { roundCompleted: this.roundCompleted };
+        }
+
+        const question = this.currentQuestion;
+        this._record({
+            questionId: question.id,
+            title: question.title,
+            outcome: 'skipped',
+            isCorrect: false,
+            score: 0,
+            hintUsed: false,
+            details: [],
+            explanation: '已跳过本题，本题不计入正确率。',
+            timestamp: Date.now()
+        });
+
+        return { roundCompleted: this.roundCompleted };
+    }
+
+    /**
+     * 记录一道题的处理结果（答对 / 答错 / 跳过统一入口，避免重复累计）
+     * 记录完成后立即抽取下一题或结束本轮，并持久化会话
+     */
+    _record(entry) {
+        // 防御性检查：同一题只记录一次
+        if (this.answeredQuestions.has(entry.questionId)) {
+            return;
+        }
+
+        this.answeredQuestions.add(entry.questionId);
+        this.questionHistory.push(entry);
+        this._selectNextQuestion();
+        this.persistSession();
     }
     
     /**
@@ -472,15 +572,210 @@ class QuizManager {
     }
     
     /**
-     * 获取当前得分
+     * 统一的测验统计口径（面板、结果弹窗、导出文件共用此方法）
+     *
+     * - correctCount / wrongCount / skippedCount 三类分开统计
+     * - accuracy：正确率只按“答对 / 答错”计算，跳过不计入分母
+     * - maxScore：整套题目固定满分，不随已答题数变化
+     */
+    getStats() {
+        const totalQuestions = CONFIG.QUIZ_QUESTIONS.length;
+        const maxScore = CONFIG.QUIZ_SCORING.MAX_SCORE;
+
+        let correctCount = 0;
+        let wrongCount = 0;
+        let skippedCount = 0;
+        let score = 0;
+        let hintCount = 0;
+
+        this.questionHistory.forEach(entry => {
+            if (entry.outcome === 'skipped') {
+                skippedCount++;
+                return;
+            }
+            if (entry.isCorrect) {
+                correctCount++;
+            } else {
+                wrongCount++;
+            }
+            score += entry.score || 0;
+            if (entry.hintUsed) hintCount++;
+        });
+
+        const answeredCount = correctCount + wrongCount;
+        const processedCount = correctCount + wrongCount + skippedCount;
+        const accuracy = answeredCount > 0
+            ? Math.round((correctCount / answeredCount) * 100)
+            : 0;
+
+        return {
+            score: score,
+            maxScore: maxScore,
+            correctCount: correctCount,
+            wrongCount: wrongCount,
+            skippedCount: skippedCount,
+            answeredCount: answeredCount,
+            processedCount: processedCount,
+            totalQuestions: totalQuestions,
+            remainingCount: totalQuestions - processedCount,
+            hintCount: hintCount,
+            accuracy: accuracy,
+            roundCompleted: this.roundCompleted
+        };
+    }
+
+    /**
+     * 兼容旧调用：获取当前得分
      */
     getScore() {
+        const stats = this.getStats();
         return {
-            score: this.score,
-            totalQuestions: this.totalQuestions,
-            accuracy: this.totalQuestions > 0 
-                ? Math.round((this.questionHistory.filter(q => q.isCorrect).length / this.totalQuestions) * 100)
-                : 0
+            score: stats.score,
+            totalQuestions: stats.processedCount,
+            accuracy: stats.accuracy
         };
+    }
+
+    /**
+     * 持久化当前会话（每次答题/跳过后调用）
+     */
+    persistSession() {
+        if (!this.isQuizMode) return;
+
+        Storage.setQuizSession({
+            questionHistory: this.questionHistory,
+            answeredIds: Array.from(this.answeredQuestions),
+            currentQuestionId: this.currentQuestion ? this.currentQuestion.id : null,
+            roundCompleted: this.roundCompleted,
+            savedAt: Date.now()
+        });
+    }
+
+    /**
+     * 清除已保存的会话
+     */
+    clearSavedSession() {
+        Storage.clearQuizSession();
+    }
+
+    /**
+     * 从本地存储恢复会话
+     * 返回：'resumed' | 'completed' | null（无可恢复会话）
+     */
+    loadSession() {
+        const saved = Storage.getQuizSession();
+        if (!saved || !Array.isArray(saved.questionHistory) || !Array.isArray(saved.answeredIds)) {
+            return null;
+        }
+
+        this.resetSessionState();
+        this.isQuizMode = true;
+        this.questionHistory = saved.questionHistory;
+        saved.answeredIds.forEach(id => this.answeredQuestions.add(id));
+        this.roundCompleted = saved.roundCompleted === true;
+
+        if (this.roundCompleted) {
+            this.currentQuestion = null;
+            return 'completed';
+        }
+
+        // 恢复当前题（保存的 ID 必然是尚未处理的题）；若找不到则重新抽一道
+        let question = null;
+        if (saved.currentQuestionId) {
+            question = CONFIG.QUIZ_QUESTIONS.find(
+                q => q.id === saved.currentQuestionId && !this.answeredQuestions.has(q.id)
+            ) || null;
+        }
+        if (!question) {
+            const available = CONFIG.QUIZ_QUESTIONS.filter(q => !this.answeredQuestions.has(q.id));
+            if (available.length === 0) {
+                this._completeRound();
+                return 'completed';
+            }
+            question = available[0];
+        }
+
+        this.currentQuestion = question;
+        this.hintUsed = false;
+
+        window.dispatchEvent(new CustomEvent('questionChanged', {
+            detail: this.currentQuestion
+        }));
+
+        return 'resumed';
+    }
+
+    /**
+     * 导出本轮答题明细为 CSV 文本（带 UTF-8 BOM，Excel 可直接打开）
+     */
+    exportReportCSV() {
+        const stats = this.getStats();
+        const BOM = '\uFEFF'; // UTF-8 BOM，确保 Excel 正确识别中文编码
+        const newline = '\r\n';
+        const esc = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+        const rows = [];
+
+        // —— 汇总区（与面板、结果弹窗同源，保证发给老师核对时一致）——
+        rows.push([esc('光学测验成绩单'), '', '', '', '', '']);
+        rows.push([esc('导出时间'), esc(Utils.formatDate(new Date())), '', '', '', '']);
+        rows.push(['']);
+        rows.push([esc('总分'), esc('固定满分'), esc('答对'), esc('答错'), esc('跳过'), esc('正确率')]);
+        rows.push([
+            esc(`${stats.score}分`),
+            esc(`${stats.maxScore}分`),
+            esc(`${stats.correctCount}题`),
+            esc(`${stats.wrongCount}题`),
+            esc(`${stats.skippedCount}题`),
+            esc(`${stats.accuracy}%（跳过不计）`)
+        ]);
+        rows.push([
+            esc('已答题数'),
+            esc('跳过题数'),
+            esc('总题数'),
+            esc('剩余题数'),
+            esc('使用提示题数'),
+            ''
+        ]);
+        rows.push([
+            esc(`${stats.answeredCount}题`),
+            esc(`${stats.skippedCount}题`),
+            esc(`${stats.totalQuestions}题`),
+            esc(`${stats.remainingCount}题`),
+            esc(`${stats.hintCount}题`),
+            ''
+        ]);
+        rows.push(['']);
+
+        // —— 逐题明细区 ——
+        rows.push([esc('序号'), esc('题目'), esc('结果'), esc('得分'), esc('使用提示'), esc('判分明细'), esc('时间')]);
+        this.questionHistory.forEach((entry, index) => {
+            const outcomeNames = { correct: '答对', wrong: '答错', skipped: '跳过' };
+            rows.push([
+                index + 1,
+                esc(entry.title),
+                esc(outcomeNames[entry.outcome] || entry.outcome),
+                esc(entry.outcome === 'skipped' ? '不计分' : `${entry.score}分`),
+                esc(entry.hintUsed ? '是' : '否'),
+                esc(this._formatDetailsForReport(entry)),
+                esc(Utils.formatDate(entry.timestamp))
+            ]);
+        });
+
+        return BOM + rows.map(row => row.join(',')).join(newline);
+    }
+
+    /**
+     * 整理单题判分明细为导出文本
+     */
+    _formatDetailsForReport(entry) {
+        if (entry.outcome === 'skipped') return '学生跳过';
+        if (entry.isCorrect) return '全部检查项通过';
+        if (!entry.details || entry.details.length === 0) {
+            return entry.explanation || '未作答完整';
+        }
+        return entry.details
+            .filter(d => !d.correct)
+            .map(d => `${d.name}（期望：${d.expected}，实际：${d.actual}）`)
+            .join('；');
     }
 }

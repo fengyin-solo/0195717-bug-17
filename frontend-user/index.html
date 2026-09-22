@@ -21,15 +21,25 @@
                     <span class="score-label">得分</span>
                     <span class="score-value" id="quiz-score-value">0</span>
                     <span class="score-separator">/</span>
-                    <span class="score-total" id="quiz-score-total">0</span>
+                    <span class="score-total" id="quiz-score-total">100</span>
                 </div>
+                <span class="quiz-progress" id="quiz-progress">第 1/10 题</span>
             </div>
-            <button class="btn btn-icon" id="btn-quiz-close" title="关闭测验">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-            </button>
+            <div class="quiz-panel-actions">
+                <button class="btn btn-icon" id="btn-quiz-export" title="导出成绩文件（CSV，可发给老师核对）">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </button>
+                <button class="btn btn-icon" id="btn-quiz-close" title="关闭测验">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="quiz-panel-body">
             <h3 class="quiz-question-title" id="quiz-question-title">题目加载中...</h3>
@@ -73,22 +83,39 @@
                 </div>
                 <div class="quiz-result-explanation" id="quiz-result-explanation"></div>
                 <div class="quiz-result-details" id="quiz-result-details"></div>
+                <div class="quiz-round-summary hidden" id="quiz-round-summary"></div>
                 <div class="quiz-result-stats">
                     <div class="stat-item">
                         <span class="stat-value" id="quiz-total-score">0</span>
-                        <span class="stat-label">总分</span>
+                        <span class="stat-label">总分(满分100)</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-value" id="quiz-accuracy">0%</span>
                         <span class="stat-label">正确率</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-value" id="quiz-answered">0</span>
-                        <span class="stat-label">已答题</span>
+                        <span class="stat-value" id="quiz-correct">0</span>
+                        <span class="stat-label">答对</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="quiz-wrong">0</span>
+                        <span class="stat-label">答错</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="quiz-skipped">0</span>
+                        <span class="stat-label">跳过</span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-quiz-export-result">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>导出成绩</span>
+                </button>
                 <button class="btn btn-secondary" id="btn-quiz-exit">
                     <span>退出测验</span>
                 </button>

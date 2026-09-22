@@ -9,7 +9,8 @@ const CONFIG = {
     STORAGE_KEYS: {
         DESIGNS: 'optics_designs',
         SETTINGS: 'optics_settings',
-        GUIDE_COMPLETED: 'optics_guide_completed'
+        GUIDE_COMPLETED: 'optics_guide_completed',
+        QUIZ_SESSION: 'optics_quiz_session'
     },
     
     // 透镜类型
@@ -119,6 +120,13 @@ const CONFIG = {
         '相机镜头常用非球面透镜来提高成像质量'
     ],
     
+    // 测验计分规则
+    QUIZ_SCORING: {
+        SCORE_PER_QUESTION: 10,   // 每题基础满分
+        SCORE_WITH_HINT: 5,       // 使用提示后的得分
+        MAX_SCORE: 100            // 整套题目固定满分（题库共 10 题 × 10 分）
+    },
+
     // 测验题库
     QUIZ_QUESTIONS: [
         {
@@ -457,3 +465,4 @@ Object.freeze(CONFIG.RENDER);
 Object.freeze(CONFIG.HELP_TEXTS);
 Object.freeze(CONFIG.PRESETS);
 Object.freeze(CONFIG.QUIZ_QUESTIONS);
+Object.freeze(CONFIG.QUIZ_SCORING);
